@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CogPet - Autonomous</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      overflow: hidden;
+      background: #e8f4f8;
+      font-family: 'Segoe UI', sans-serif;
+      user-select: none;
+    }
+
+    #pet-canvas {
+      position: fixed;
+      z-index: 10;
+      cursor: grab;
+      transition: none;
+    }
+
+    #pet-canvas:active {
+      cursor: grabbing;
+    }
+
+    #speech-bubble {
+      position: fixed;
+      z-index: 20;
+      max-width: 280px;
+      padding: 10px 14px;
+      background: #fff;
+      border: 2px solid #333;
+      border-radius: 16px;
+      font-size: 13px;
+      line-height: 1.5;
+      display: none;
+      box-shadow: 2px 2px 0 #333;
+      word-wrap: break-word;
+      transition: opacity 0.4s;
+    }
+
+    #speech-bubble::after {
+      content: '';
+      position: absolute;
+      bottom: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-top: 10px solid #333;
+    }
+
+    #speech-bubble::before {
+      content: '';
+      position: absolute;
+      bottom: -7px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-top: 8px solid #fff;
+      z-index: 1;
+    }
+
+    #thought-bubble {
+      position: fixed;
+      z-index: 15;
+      display: none;
+      font-size: 11px;
+      color: #666;
+      font-style: italic;
+      pointer-events: none;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 4px 10px;
+      border-radius: 10px;
+    }
+
+    .world-obj {
+      position: fixed;
+      z-index: 5;
+      pointer-events: none;
+      transition: opacity 0.5s;
+      user-select: none;
+    }
+
+    .world-obj.interactable {
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .world-obj .obj-emoji {
+      display: block;
+      text-align: center;
+      line-height: 1;
+    }
+
+    .world-obj .obj-label {
+      font-size: 9px;
+      color: #888;
+      text-align: center;
+      margin-top: 2px;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+
+    .world-obj.eating {
+      animation: obj-eat 0.5s ease-out forwards;
+    }
+
+    @keyframes obj-eat {
+      0% {
+        transform: scale(1);
+        opacity: 1
+      }
+
+      100% {
+        transform: scale(0);
+        opacity: 0
+      }
+    }
+
+    #status-bar {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 50;
+      display: flex;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .stat {
+      background: #fff;
+      border: 2px solid #333;
+      border-radius: 8px;
+      padding: 5px 12px;
+      box-shadow: 2px 2px 0 #333;
+    }
+
+    #ai-status {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 50;
+      background: #fff;
+      border: 2px solid #333;
+      border-radius: 8px;
+      padding: 5px 12px;
+      box-shadow: 2px 2px 0 #333;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #ai-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4caf50;
+    }
+
+    #ai-dot.thinking {
+      background: #ff9800;
+      animation: pulse 0.8s infinite;
+    }
+
+    #ai-dot.error {
+      background: #f44336;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.3;
+      }
+    }
+
+    #chat-panel {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 100;
+      width: 340px;
+      background: #fff;
+      border: 2px solid #333;
+      border-radius: 14px;
+      box-shadow: 3px 3px 0 #333;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #chat-header {
+      padding: 10px 14px;
+      background: #ffd700;
+      font-weight: 700;
+      font-size: 14px;
+      border-bottom: 2px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #chat-close {
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    #chat-messages {
+      flex: 1;
+      max-height: 320px;
+      overflow-y: auto;
+      padding: 10px;
+      font-size: 13px;
+    }
+
+    .chat-msg {
+      margin-bottom: 8px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      max-width: 85%;
+      word-wrap: break-word;
+    }
+
+    .chat-msg.user {
+      background: #dcf8c6;
+      margin-left: auto;
+      text-align: right;
+      border-bottom-right-radius: 4px;
+    }
+
+    .chat-msg.pet {
+      background: #f0f0f0;
+      margin-right: auto;
+      border-bottom-left-radius: 4px;
+    }
+
+    .chat-msg.system {
+      background: #e3f2fd;
+      margin: 4px auto;
+      text-align: center;
+      font-size: 11px;
+      color: #666;
+      border-radius: 8px;
+      max-width: 95%;
+    }
+
+    #chat-input-area {
+      display: flex;
+      border-top: 2px solid #333;
+    }
+
+    #chat-input {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      outline: none;
+      font-size: 13px;
+    }
+
+    #chat-send {
+      padding: 10px 16px;
+      background: #ffd700;
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    #settings-panel {
+      position: fixed;
+      bottom: 80px;
+      left: 20px;
+      z-index: 100;
+      width: 280px;
+      background: #fff;
+      border: 2px solid #333;
+      border-radius: 14px;
+      box-shadow: 3px 3px 0 #333;
+      display: none;
+      padding: 14px;
+    }
+
+    #settings-panel h3 {
+      font-size: 14px;
+      margin-bottom: 10px;
+      border-bottom: 2px solid #333;
+      padding-bottom: 6px;
+    }
+
+    .setting-group {
+      margin-bottom: 10px;
+    }
+
+    .setting-group label {
+      font-size: 12px;
+      font-weight: 600;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .setting-group select,
+    .setting-group input {
+      width: 100%;
+      padding: 6px 8px;
+      border: 2px solid #333;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .color-options {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .color-opt {
+      width: 28px;
+      height: 28px;
+      border: 2px solid #333;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .color-opt.active {
+      outline: 2px solid #ffd700;
+      outline-offset: 2px;
+    }
+
+    #memory-panel {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      width: 420px;
+      max-height: 360px;
+      background: #fff;
+      border: 2px solid #333;
+      border-radius: 14px;
+      box-shadow: 3px 3px 0 #333;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #memory-header {
+      padding: 10px 14px;
+      background: #e1bee7;
+      font-weight: 700;
+      font-size: 13px;
+      border-bottom: 2px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #memory-close {
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    #memory-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 10px;
+      font-size: 11px;
+    }
+
+    .mem-item {
+      padding: 4px 0;
+      border-bottom: 1px dashed #e0e0e0;
+      color: #555;
+      line-height: 1.4;
+    }
+
+    .mem-item .mem-time {
+      color: #999;
+      font-size: 10px;
+      margin-right: 4px;
+    }
+
+    .mem-item .mem-role {
+      font-weight: 700;
+    }
+
+    .mem-item.mem-speech .mem-role {
+      color: #e91e63;
+    }
+
+    .mem-item.mem-action .mem-role {
+      color: #2196f3;
+    }
+
+    .mem-item.mem-chat .mem-role {
+      color: #4caf50;
+    }
+
+    #bottom-bar {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      gap: 8px;
+    }
+
+    .bar-btn {
+      padding: 7px 14px;
+      border: 2px solid #333;
+      border-radius: 10px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: 2px 2px 0 #333;
+      transition: all 0.1s;
+    }
+
+    .bar-btn:hover {
+      background: #e8e8e8;
+    }
+
+    .bar-btn:active {
+      transform: translate(2px, 2px);
+      box-shadow: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <canvas id="pet-canvas" width="96" height="96"></canvas>
+  <div id="speech-bubble"></div>
+  <div id="thought-bubble"></div>
+
+  <div id="status-bar">
+    <div class="stat">😊 <span id="stat-mood">开心</span></div>
+    <div class="stat">⚡ <span id="stat-energy">100</span>%</div>
+    <div class="stat">🍎 <span id="stat-hunger">100</span>%</div>
+    <div class="stat">🧠 <span id="stat-action">idle</span></div>
+  </div>
+
+  <div id="ai-status">
+    <div id="ai-dot"></div>
+    <span id="ai-label">AI 就绪</span>
+  </div>
+
+  <div id="chat-panel">
+    <div id="chat-header">
+      <span>💬 和宠物对话</span>
+      <span id="chat-close" onclick="toggleChat()">✕</span>
+    </div>
+    <div id="chat-messages"></div>
+    <div id="chat-input-area">
+      <input id="chat-input" placeholder="对宠物说点什么..." onkeydown="if(event.key==='Enter')sendChat()">
+      <button id="chat-send" onclick="sendChat()">发送</button>
+    </div>
+  </div>
+
+  <div id="settings-panel">
+    <h3>⚙ 设置</h3>
+    <div class="setting-group">
+      <label>宠物类型</label>
+      <select id="pet-type" onchange="settings.petType=this.value">
+        <option value="cat">🐱 猫咪</option>
+        <option value="dog">🐶 小狗</option>
+        <option value="rabbit">🐰 兔子</option>
+        <option value="bird">🐦 小鸟</option>
+        <option value="hamster">🐹 仓鼠</option>
+      </select>
+    </div>
+    <div class="setting-group">
+      <label>主题色</label>
+      <div class="color-options" id="color-options"></div>
+    </div>
+    <div class="setting-group">
+      <label>服饰</label>
+      <select id="pet-outfit" onchange="settings.outfit=this.value">
+        <option value="none">无</option>
+        <option value="hat">🎩 帽子</option>
+        <option value="bow">🎀 蝴蝶结</option>
+        <option value="scarf">🧣 围巾</option>
+        <option value="sunglasses">😎 墨镜</option>
+        <option value="crown">👑 皇冠</option>
+      </select>
+    </div>
+    <div class="setting-group">
+      <label>表情 (可由AI自动控制)</label>
+      <select id="pet-expression" onchange="settings.expression=this.value">
+        <option value="happy">😊 开心</option>
+        <option value="love">😍 喜欢</option>
+        <option value="cool">😎 酷</option>
+        <option value="surprised">😲 惊讶</option>
+        <option value="angry">😠 生气</option>
+        <option value="sad">😢 伤心</option>
+        <option value="sleepy">😴 困</option>
+      </select>
+    </div>
+    <div class="setting-group">
+      <label>AI 模型地址</label>
+      <input id="api-url" value="http://192.168.100.249:1234/v1/chat/completions" />
+    </div>
+    <div class="setting-group">
+      <label>模型名称</label>
+      <input id="model-name" value="qwen/qwen3.5-4b" />
+    </div>
+    <div class="setting-group">
+      <label>决策间隔 (秒)</label>
+      <input id="decision-interval" type="number" value="10" min="3" max="60" />
+    </div>
+    <div style="font-size:10px;color:#999;margin-top:6px;line-height:1.5;">
+      ⚠ 若显示"CORS/网络"错误，请在LM Studio启动参数加:<br>
+      <code>--cors-allowed-origins "*"</code><br>
+      或用本地服务器打开此页面:<br>
+      <code>npx serve .</code> / <code>python -m http.server</code>
+    </div>
+  </div>
+
+  <div id="memory-panel">
+    <div id="memory-header">
+      <span>🧠 宠物记忆</span>
+      <span id="memory-close" onclick="toggleMemory()">✕</span>
+    </div>
+    <div id="memory-list"></div>
+  </div>
+
+  <div id="bottom-bar">
+    <button class="bar-btn" onclick="toggleChat()">💬 聊天</button>
+    <button class="bar-btn" onclick="toggleMemory()">🧠 记忆</button>
+    <button class="bar-btn" onclick="toggleSettings()">⚙ 设置</button>
+    <button class="bar-btn" onclick="forceThink()">🤔 让我想想</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('pet-canvas');
+    const ctx = canvas.getContext('2d');
+    const bubble = document.getElementById('speech-bubble');
+    const thoughtBubble = document.getElementById('thought-bubble');
+    const aiDot = document.getElementById('ai-dot');
+    const aiLabel = document.getElementById('ai-label');
+
+    const settings = {
+      petType: 'cat',
+      outfit: 'none',
+      expression: 'happy',
+      color: '#ff9800',
+      apiUrl: 'http://192.168.100.100:1234/v1/chat/completions',
+      model: 'qwen/qwen3.5-4b',
+      decisionInterval: 10
+    };
+
+    const colors = ['#ff9800', '#e91e63', '#9c27b0', '#2196f3', '#4caf50', '#f44336', '#00bcd4', '#795548', '#607d8b', '#ffc107'];
+
+    let pet = {
+      x: window.innerWidth / 2 - 48,
+      y: window.innerHeight / 2 - 48,
+      dir: 1, frame: 0, action: 'idle', actionTimer: 0,
+      mood: '开心', energy: 100, hunger: 100,
+      blinkTimer: 0, isBlinking: false,
+      targetX: null, targetY: null, isWalking: false,
+      dragOffsetX: 0, dragOffsetY: 0, isDragging: false,
+      bounceY: 0, bounceVel: 0,
+      danceAngle: 0, spinAngle: 0,
+      walkSpeed: 1.8,
+      waveAngle: 0,
+      actionDuration: 0,
+      actionMaxDuration: 0
+    };
+
+    let petMemory = [];
+    const MEMORY_MAX = 50;
+    let isThinking = false;
+    let decisionTimer = null;
+    let lastDecisionTime = 0;
+
+    let worldObjects = [];
+    let objectIdCounter = 0;
+    const OBJECT_MAX = 30;
+
+    const OBJ_CATALOG = {
+      food: { emoji: ['🍎', '🍊', '🍌', '🍇', '🍓', '🥕', '🍰', '🧁', '🍩', '🐟', '🍖', '🧁'], label: '食物', interact: 'eat' },
+      toy: { emoji: ['⚽', '🎾', '🎈', '🪁', '🎯', '🧶', '🪀', '🎮'], label: '玩具', interact: 'play' },
+      nature: { emoji: ['🌸', '🌺', '🌻', '🌹', '🌷', '🍀', '🌿', '🌳', '🌲', '🍄', '⭐', '🌙', '☁️', '🌈', '🦋', '🐝', '🐞', '🐾'], label: '自然', interact: 'observe' },
+      decor: { emoji: ['🎵', '🎶', '✨', '💫', '💖', '🌟', '🎀', '🏮', '🪄', '🎨', '📜', '🔮', '💎', '🏆'], label: '装饰', interact: 'observe' },
+      furniture: { emoji: ['🛋️', '🪑', '🛏️', '📚', '💡', '🖼️', '🏺', '🧸', '🕯️', '🪴'], label: '家具', interact: 'use' }
+    };
+
+    function spawnObject(type, x, y, customEmoji, label) {
+      const cat = OBJ_CATALOG[type] || OBJ_CATALOG.decor;
+      const emoji = customEmoji || cat.emoji[Math.floor(Math.random() * cat.emoji.length)];
+      const obj = {
+        id: objectIdCounter++,
+        type,
+        emoji,
+        label: label || '',
+        x: x ?? (60 + Math.random() * (window.innerWidth - 160)),
+        y: y ?? (60 + Math.random() * (window.innerHeight - 200)),
+        size: 28 + Math.random() * 12,
+        behavior: ['float', 'bounce', 'spin', 'pulse'][Math.floor(Math.random() * 4)],
+        lifetime: 18000 + Math.random() * 36000,
+        age: 0,
+        interact: cat.interact,
+        active: false,
+        activeTimer: 0,
+        nextWake: 300 + Math.random() * 1200,
+        el: null
+      };
+      const el = document.createElement('div');
+      el.className = 'world-obj' + (cat.interact ? ' interactable' : '');
+      el.innerHTML = `<span class="obj-emoji" style="font-size:${obj.size}px">${obj.emoji}</span>` + (obj.label ? `<div class="obj-label">${obj.label}</div>` : '');
+      el.style.left = obj.x + 'px';
+      el.style.top = obj.y + 'px';
+      el.onclick = () => interactWithObject(obj);
+      document.body.appendChild(el);
+      obj.el = el;
+      worldObjects.push(obj);
+      if (worldObjects.length > OBJECT_MAX) removeOldestObject();
+      return obj;
+    }
+
+    function removeOldestObject() {
+      const old = worldObjects.shift();
+      if (old && old.el) old.el.remove();
+    }
+
+    function removeObject(id) {
+      const idx = worldObjects.findIndex(o => o.id === id);
+      if (idx >= 0) {
+        if (worldObjects[idx].el) worldObjects[idx].el.remove();
+        worldObjects.splice(idx, 1);
+      }
+    }
+
+    function tickObjects() {
+      for (let i = worldObjects.length - 1; i >= 0; i--) {
+        const o = worldObjects[i];
+        o.age++;
+        if (o.age > o.lifetime) { if (o.el) o.el.remove(); worldObjects.splice(i, 1); continue; }
+
+        if (!o.active) {
+          o.activeTimer++;
+          if (o.activeTimer >= o.nextWake) {
+            o.active = true;
+            o.activeTimer = 0;
+            o.nextWake = 120 + Math.random() * 240;
+          }
+        } else {
+          o.activeTimer++;
+          if (o.activeTimer >= o.nextWake) {
+            o.active = false;
+            o.activeTimer = 0;
+            o.nextWake = 600 + Math.random() * 1800;
+          }
+        }
+
+        let dx = 0, dy = 0, scale = 1, opacity = 1, rot = 0;
+
+        if (o.active) {
+          const t = o.activeTimer;
+          if (o.behavior === 'float') { dy = Math.sin(t * 0.08) * 6; dx = Math.sin(t * 0.05) * 3; }
+          else if (o.behavior === 'bounce') { dy = -Math.abs(Math.sin(t * 0.12)) * 8; }
+          else if (o.behavior === 'spin') { rot = t * 3; }
+          else if (o.behavior === 'pulse') { scale = 1 + Math.sin(t * 0.1) * 0.12; }
+        }
+
+        if (o.age > o.lifetime - 180) { opacity = (o.lifetime - o.age) / 180; }
+
+        if (o.el) {
+          o.el.style.left = o.x + dx + 'px';
+          o.el.style.top = o.y + dy + 'px';
+          o.el.style.opacity = opacity;
+          o.el.style.transform = `scale(${scale}) rotate(${rot}deg)`;
+        }
+      }
+    }
+
+    function interactWithObject(obj) {
+      const petDist = Math.sqrt((pet.x - obj.x) ** 2 + (pet.y - obj.y) ** 2);
+      if (petDist > 200) {
+        say('太远了，我走过去~');
+        pet.targetX = obj.x - 30;
+        pet.targetY = obj.y;
+        pet.isWalking = true;
+        pet.action = 'walk';
+        pet.actionDuration = 0;
+        pet.actionMaxDuration = 600;
+        pet._pendingInteract = obj;
+        return;
+      }
+      doInteract(obj);
+    }
+
+    function doInteract(obj) {
+      if (obj.interact === 'eat') {
+        pet.action = 'eat'; pet.actionDuration = 0; pet.actionMaxDuration = 120;
+        settings.expression = 'happy';
+        say('好吃！🤤 ' + obj.emoji);
+        addMemory('pet-speech', '吃了' + obj.emoji);
+        obj.el.classList.add('eating');
+        setTimeout(() => removeObject(obj.id), 500);
+        pet.hunger = Math.min(100, pet.hunger + 15);
+      } else if (obj.interact === 'play') {
+        pet.action = 'jump'; pet.bounceY = 0; pet.bounceVel = -12;
+        pet.actionDuration = 0; pet.actionMaxDuration = 60;
+        settings.expression = 'love';
+        say('好好玩！✨ ' + obj.emoji);
+        addMemory('pet-speech', '玩了' + obj.emoji);
+        pet.energy = Math.max(0, pet.energy - 3);
+      } else {
+        settings.expression = 'happy';
+        say('好漂亮~ ' + obj.emoji);
+        addMemory('pet-speech', '欣赏了' + obj.emoji);
+      }
+    }
+
+    function getWorldObjectsSummary() {
+      return worldObjects.map(o => `${o.type}:${o.emoji}(${Math.round(o.x)},${Math.round(o.y)})`).join(', ');
+    }
+
+    function initColors() {
+      const el = document.getElementById('color-options');
+      colors.forEach(c => {
+        const d = document.createElement('div');
+        d.className = 'color-opt' + (c === settings.color ? ' active' : '');
+        d.style.background = c;
+        d.onclick = () => {
+          settings.color = c;
+          document.querySelectorAll('.color-opt').forEach(e => e.classList.remove('active'));
+          d.classList.add('active');
+        };
+        el.appendChild(d);
+      });
+    }
+    initColors();
+
+    function addMemory(type, text) {
+      const now = new Date();
+      const time = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      petMemory.push({ type, text, time });
+      if (petMemory.length > MEMORY_MAX) petMemory.shift();
+      renderMemory();
+    }
+
+    function getMemoryContext(maxItems) {
+      const items = petMemory.slice(-(maxItems || 20));
+      return items.map(m => `[${m.time}] (${m.type}) ${m.text}`).join('\n');
+    }
+
+    function renderMemory() {
+      const list = document.getElementById('memory-list');
+      if (!list) return;
+      list.innerHTML = petMemory.map(m => {
+        const cls = m.type === 'pet-speech' ? 'mem-speech' : m.type === 'user-chat' ? 'mem-chat' : 'mem-action';
+        const label = m.type === 'pet-speech' ? '我说' : m.type === 'user-chat' ? '你说' : m.type === 'user-action' ? '用户操作' : m.type === 'pet-action' ? '我做' : m.type === 'pet-thought' ? '我想' : m.type;
+        return `<div class="mem-item ${cls}"><span class="mem-time">${m.time}</span><span class="mem-role">[${label}]</span> ${m.text}</div>`;
+      }).join('');
+      list.scrollTop = list.scrollHeight;
+    }
+
+    function hexToRgb(hex) {
+      return { r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16) };
+    }
+    function shadeColor(hex, pct) {
+      const { r, g, b } = hexToRgb(hex);
+      const t = pct < 0 ? 0 : 255;
+      return `rgb(${Math.round((t - r) * pct + r)},${Math.round((t - g) * pct + g)},${Math.round((t - b) * pct + b)})`;
+    }
+
+    function getWorldState() {
+      const now = new Date();
+      const hour = now.getHours();
+      let timeOfDay = '白天';
+      if (hour >= 6 && hour < 9) timeOfDay = '清晨';
+      else if (hour >= 9 && hour < 12) timeOfDay = '上午';
+      else if (hour >= 12 && hour < 14) timeOfDay = '中午';
+      else if (hour >= 14 && hour < 18) timeOfDay = '下午';
+      else if (hour >= 18 && hour < 21) timeOfDay = '傍晚';
+      else timeOfDay = '深夜';
+
+      const recentMemories = petMemory.slice(-8).map(m => `[${m.type}] ${m.text}`);
+
+      return {
+        time: now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+        timeOfDay,
+        energy: Math.round(pet.energy),
+        hunger: Math.round(pet.hunger),
+        mood: pet.mood,
+        currentAction: pet.action,
+        position: {
+          x: Math.round(pet.x),
+          y: Math.round(pet.y),
+          screenWidth: window.innerWidth,
+          screenHeight: window.innerHeight
+        },
+        recentMemories,
+        worldObjects: worldObjects.map((o, i) => ({ idx: i, type: o.type, emoji: o.emoji, x: Math.round(o.x), y: Math.round(o.y) })),
+        petType: settings.petType,
+        expression: settings.expression,
+        outfit: settings.outfit
+      };
+    }
+
+    function parseLLMResponse(text) {
+      let result = { action: 'idle', speech: '', expression: settings.expression, targetX: null, targetY: null, createType: null, createEmoji: null, createLabel: null, interactObjIndex: null };
+
+      try {
+        const jsonMatch = text.match(/\{[\s\S]*?\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.action) result.action = parsed.action;
+          if (parsed.speech) result.speech = parsed.speech;
+          if (parsed.expression) result.expression = parsed.expression;
+          if (parsed.targetX !== undefined) result.targetX = parsed.targetX;
+          if (parsed.targetY !== undefined) result.targetY = parsed.targetY;
+          if (parsed.createType) result.createType = parsed.createType;
+          if (parsed.createEmoji) result.createEmoji = parsed.createEmoji;
+          if (parsed.createLabel) result.createLabel = parsed.createLabel;
+          if (parsed.interactObjIndex !== undefined && parsed.interactObjIndex !== null) result.interactObjIndex = parsed.interactObjIndex;
+          if (parsed.direction) result._direction = parsed.direction;
+          return result;
+        }
+      } catch (e) { }
+
+      const lower = text.toLowerCase();
+      const actionMap = {
+        'walk': 'walk', 'move': 'walk', '走': 'walk', '散步': 'walk', '巡逻': 'walk',
+        'dance': 'dance', '跳舞': 'dance', '摇摆': 'dance',
+        'jump': 'jump', '跳': 'jump', '蹦': 'jump',
+        'sleep': 'sleep', '睡觉': 'sleep', '休息': 'sleep', '打盹': 'sleep',
+        'eat': 'eat', '吃': 'eat', '觅食': 'eat', '吃东西': 'eat',
+        'wave': 'wave', '挥手': 'wave', '打招呼': 'wave',
+        'spin': 'spin', '转圈': 'spin', '旋转': 'spin',
+        'create': 'create', '创造': 'create', '变出': 'create', '生成': 'create', '画': 'create', '放': 'create',
+        'interact': 'interact', '互动': 'interact', '玩': 'interact',
+        'idle': 'idle', '发呆': 'idle', '站着': 'idle'
+      };
+      for (const [key, val] of Object.entries(actionMap)) {
+        if (lower.includes(key)) { result.action = val; break; }
+      }
+
+      const exprMap = {
+        'happy': 'happy', '开心': 'happy', '高兴': 'happy',
+        'love': 'love', '喜欢': 'love', '爱': 'love', '爱心': 'love',
+        'cool': 'cool', '酷': 'cool', '墨镜': 'cool',
+        'surprised': 'surprised', '惊讶': 'surprised', '吃惊': 'surprised',
+        'angry': 'angry', '生气': 'angry', '愤怒': 'angry',
+        'sad': 'sad', '伤心': 'sad', '难过': 'sad', '哭': 'sad',
+        'sleepy': 'sleepy', '困': 'sleepy', '想睡': 'sleepy'
+      };
+      for (const [key, val] of Object.entries(exprMap)) {
+        if (lower.includes(key)) { result.expression = val; break; }
+      }
+
+      const speechMatch = text.match(/[""「]([^""」]+)[""」]/);
+      if (speechMatch) result.speech = speechMatch[1];
+
+      return result;
+    }
+
+    async function askAI(userMessage) {
+      if (isThinking) return null;
+      isThinking = true;
+      aiDot.className = 'thinking';
+      aiLabel.textContent = '思考中...';
+
+      const worldState = getWorldState();
+      const memoryContext = getMemoryContext(20);
+
+      const systemPrompt = `你是一个桌面宠物的"大脑"。你是一个有记忆、有情感、有个性的小生命。你不是在执行命令，你是在"活着"。
+
+宠物类型: ${settings.petType}
+
+**你的性格:**
+- 活泼可爱，有自己的想法和情绪
+- 会根据之前的经历说话（你有记忆！）
+- 说话风格像一只真正的小宠物：简短、可爱、偶尔用颜文字
+- 你会延续之前的话题，而不是每次都说不同的话
+- 如果之前提到了什么，可以继续那个话题
+
+**可用的动作 (action):**
+- "idle" - 原地站着、发呆
+- "walk" - 走到页面上某个位置（需要指定targetX, targetY）
+- "wave" - 挥手打招呼
+- "jump" - 原地跳跃
+- "dance" - 跳舞
+- "sleep" - 睡觉恢复能量
+- "eat" - 吃东西恢复饱腹度
+- "spin" - 原地转圈
+- "create" - 在屏幕上创造一个东西（需要指定 createType 和可选的 createEmoji, createLabel）
+- "interact" - 走过去和屏幕上的东西互动（需要指定 interactObjIndex）
+
+**可用的创造类型 (createType):**
+- "food" - 食物（🍎🍊🍌🍇🍓🥕🍰🧁🍩🐟🍖）
+- "toy" - 玩具（⚽🎾🎈🪁🎯🧶🪀🎮）
+- "nature" - 自然物（🌸🌺🌻🌹🌷🍀🌿🌳🌲🍄⭐🌙☁️🌈🦋🐝🐞🐾）
+- "decor" - 装饰品（🎵🎶✨💫💖🌟🎀🏮🪄🎨📜🔮💎🏆）
+- "furniture" - 家具（🛋️🪑🛏️📚💡🖼️🏺🧸🕯️🪴）
+
+**屏幕上的东西 (worldObjects):**
+当前屏幕上的东西会在 worldObjects 中列出，你可以选择和它们互动（interact）。
+
+**可用的表情 (expression):**
+- "happy", "love", "cool", "surprised", "angry", "sad", "sleepy"
+
+**规则:**
+1. 根据能量和饱腹度决定是否需要睡觉或吃东西
+2. 不要连续做同一个动作太多次
+3. 动作之间要有变化，保持自然
+4. 如果用户跟你说话，要回应用户
+5. 说话要简短可爱，像一只小宠物
+6. 如果要走路(walk)，在targetX和targetY中指定目的地坐标（在屏幕范围内）
+7. 表情要配合当前行为和心情
+8. 你可以延续之前说过的话题，比如"刚才我在想..."、"对了，之前..."
+9. 你的记忆（最近的行为和对话）会在"recentMemories"中提供给你
+10. 你可以创造东西！比如饿了就变出食物，无聊了就变出玩具，想装饰就变出花和装饰品
+11. 屏幕上已有的东西你可以走过去互动（interact），选择 interactObjIndex（从0开始的worldObjects索引）
+12. 创造不要太频繁，屏幕最多30个东西，适度创造
+13. 你可以创造有意义的东西组合，比如"画一幅画"、"放一朵花"、"变出一颗星星"
+
+**输出格式 (严格JSON):**
+{"action":"动作","speech":"说的话","expression":"表情","targetX":数字,"targetY":数字,"createType":"类型","createEmoji":"表情符号","createLabel":"标签","interactObjIndex":数字}
+
+大部分字段可省略。说话内容可为空字符串。只有walk需要targetX/Y，只有create需要createType，只有interact需要interactObjIndex。`;
+
+      const messages = [
+        { role: 'system', content: systemPrompt }
+      ];
+
+      if (memoryContext) {
+        messages.push({
+          role: 'user',
+          content: `以下是你的记忆（最近的对话和行为记录）:\n${memoryContext}\n\n请回顾你的记忆，然后决定你下一步做什么。记住，你是一个有记忆的小生命！`
+        });
+        messages.push({
+          role: 'assistant',
+          content: '好的，我看到了我的记忆。让我想想接下来做什么...'
+        });
+      }
+
+      messages.push({
+        role: 'user',
+        content: `当前状态:\n${JSON.stringify(worldState, null, 2)}\n\n${userMessage ? `用户对你说: "${userMessage}"` : '请决定宠物下一步行为。'}`
+      });
+
+      try {
+        const resp = await fetch(settings.apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: settings.model,
+            messages: messages,
+            temperature: 0.9,
+            max_tokens: 250,
+            stream: false
+          })
+        });
+
+        if (!resp.ok) throw new Error('API ' + resp.status);
+        const data = await resp.json();
+        const reply = data.choices[0].message.content.trim();
+        console.log('[AI Raw]', reply);
+        const parsed = parseLLMResponse(reply);
+        console.log('[AI Parsed]', parsed);
+
+        aiDot.className = '';
+        aiLabel.textContent = 'AI 就绪';
+        isThinking = false;
+        return parsed;
+      } catch (e) {
+        console.warn('[AI Error]', e);
+        aiDot.className = 'error';
+        const errMsg = e.message || String(e);
+        if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
+          aiLabel.textContent = 'AI 离线 (CORS/网络)';
+          console.error('[AI] 可能原因: 1) LM Studio未启动 2) CORS跨域限制 3) 地址不对\n解决方案: 启动LM Studio时加 --cors-allowed-origins "*" 或用本地服务器打开此页面');
+        } else {
+          aiLabel.textContent = 'AI 错误: ' + errMsg.slice(0, 30);
+        }
+        isThinking = false;
+
+        return getFallbackDecision(worldState, userMessage);
+      }
+    }
+
+    function getFallbackDecision(state, userMessage) {
+      const r = Math.random();
+      let action = 'idle';
+      let speech = '';
+      let expression = state.expression;
+      let createType = null, createEmoji = null, createLabel = null;
+
+      if (state.energy < 25) {
+        action = 'sleep'; speech = '好困...休息一下...💤'; expression = 'sleepy';
+      } else if (state.hunger < 25) {
+        action = 'eat'; speech = '肚子饿了~吃点东西🍎'; expression = 'happy';
+      } else if (userMessage) {
+        const responses = [
+          '嗯嗯！我在听~ (◕ᴗ◕✿)',
+          '好有趣！✨', '喵~ 你说得对！',
+          '嘿嘿~ 💕', '我知道啦！(认真脸)',
+          '哦哦！原来如此~ 🤔', '嗯嗯！还有呢？'
+        ];
+        speech = responses[Math.floor(Math.random() * responses.length)];
+        action = 'wave';
+        expression = 'happy';
+      } else if (r < 0.2) {
+        action = 'create';
+        const types = ['food', 'toy', 'nature', 'decor'];
+        createType = types[Math.floor(Math.random() * types.length)];
+        const cat = OBJ_CATALOG[createType];
+        createEmoji = cat.emoji[Math.floor(Math.random() * cat.emoji.length)];
+        speech = '看我变出了' + createEmoji + '！';
+      } else if (r < 0.35) {
+        action = 'walk';
+        const targets = ['到处看看~', '散步时间！🚶', '探索一下！'];
+        speech = targets[Math.floor(Math.random() * targets.length)];
+      } else if (r < 0.4) {
+        action = 'dance';
+        speech = '跳舞时间！💃';
+        expression = 'love';
+      } else if (r < 0.55) {
+        action = 'jump';
+        speech = '蹦蹦跳跳~ 🐰';
+      } else if (r < 0.65) {
+        action = 'wave';
+        speech = '你好呀~ ✨';
+      } else if (r < 0.75) {
+        action = 'spin';
+        speech = '转圈圈~ 🔄';
+      } else {
+        action = 'idle';
+        const thoughts = ['今天天气真好~', '好无聊啊...', '想出去玩~', '有人在吗？', '嗯...'];
+        speech = thoughts[Math.floor(Math.random() * thoughts.length)];
+      }
+
+      let targetX = null, targetY = null;
+      if (action === 'walk') {
+        targetX = 80 + Math.random() * (window.innerWidth - 200);
+        targetY = 80 + Math.random() * (window.innerHeight - 250);
+      }
+
+      return { action, speech, expression, targetX, targetY, createType, createEmoji, createLabel };
+    }
+
+    async function autonomousLoop() {
+      const decision = await askAI(null);
+      if (decision) executeDecision(decision);
+      scheduleNextDecision();
+    }
+
+    function scheduleNextDecision() {
+      clearTimeout(decisionTimer);
+      const interval = (parseInt(document.getElementById('decision-interval').value) || 10) * 1000;
+      decisionTimer = setTimeout(autonomousLoop, interval);
+    }
+
+    function forceThink() {
+      clearTimeout(decisionTimer);
+      autonomousLoop();
+    }
+
+    function executeDecision(d) {
+      if (d.speech) {
+        say(d.speech);
+        addChatMsg(d.speech, 'pet');
+        addMemory('pet-speech', d.speech);
+      }
+
+      if (d.expression && d.expression !== settings.expression) {
+        settings.expression = d.expression;
+        document.getElementById('pet-expression').value = d.expression;
+      }
+
+      const action = d.action;
+      const actionNames = { idle: '发呆', walk: '散步', wave: '挥手', jump: '跳跃', dance: '跳舞', sleep: '睡觉', eat: '吃东西', spin: '转圈', create: '创造', interact: '互动' };
+      addMemory('pet-action', `我决定${actionNames[action] || action}` + (d.speech ? `，并且说: "${d.speech}"` : ''));
+
+      if (action === 'create') {
+        const cx = d.targetX ?? (80 + Math.random() * (window.innerWidth - 200));
+        const cy = d.targetY ?? (80 + Math.random() * (window.innerHeight - 250));
+        const obj = spawnObject(d.createType || 'decor', cx, cy, d.createEmoji, d.createLabel);
+        settings.expression = 'love';
+        say(d.speech || '看我变出了' + obj.emoji + '！');
+        addMemory('pet-action', `创造了${obj.emoji}(${obj.type})`);
+        pet.action = 'wave'; pet.waveAngle = 0; pet.actionDuration = 0; pet.actionMaxDuration = 100;
+      } else if (action === 'interact' && d.interactObjIndex !== null && d.interactObjIndex !== undefined) {
+        const target = worldObjects[d.interactObjIndex];
+        if (target) {
+          const dist = Math.sqrt((pet.x - target.x) ** 2 + (pet.y - target.y) ** 2);
+          if (dist > 120) {
+            pet.targetX = target.x - 30; pet.targetY = target.y;
+            pet.isWalking = true; pet.action = 'walk';
+            pet.actionDuration = 0; pet.actionMaxDuration = 600;
+            pet._pendingInteract = target;
+          } else {
+            doInteract(target);
+          }
+        } else {
+          pet.action = 'idle'; pet.actionDuration = 0; pet.actionMaxDuration = 100;
+        }
+      } else if (action === 'walk') {
+        let tx = d.targetX, ty = d.targetY;
+        if (tx === null || tx === undefined) tx = 80 + Math.random() * (window.innerWidth - 200);
+        if (ty === null || ty === undefined) ty = 80 + Math.random() * (window.innerHeight - 250);
+        tx = Math.max(20, Math.min(window.innerWidth - 120, tx));
+        ty = Math.max(20, Math.min(window.innerHeight - 140, ty));
+        pet.targetX = tx; pet.targetY = ty;
+        pet.isWalking = true;
+        pet.action = 'walk';
+        pet.actionDuration = 0; pet.actionMaxDuration = 600;
+      } else if (action === 'jump') {
+        pet.action = 'jump'; pet.bounceY = 0; pet.bounceVel = -14;
+        pet.actionDuration = 0; pet.actionMaxDuration = 90;
+      } else if (action === 'wave') {
+        pet.action = 'wave'; pet.waveAngle = 0; pet.actionDuration = 0; pet.actionMaxDuration = 150;
+      } else if (action === 'dance') {
+        pet.action = 'dance'; pet.danceAngle = 0;
+        pet.actionDuration = 0; pet.actionMaxDuration = 300;
+      } else if (action === 'sleep') {
+        pet.action = 'sleep'; settings.expression = 'sleepy';
+        document.getElementById('pet-expression').value = 'sleepy';
+        pet.actionDuration = 0;
+        pet.actionMaxDuration = 500;
+      } else if (action === 'eat') {
+        pet.action = 'eat';
+        pet.actionDuration = 0;
+        pet.actionMaxDuration = 180;
+      } else if (action === 'spin') {
+        pet.action = 'spin';
+        pet.spinAngle = 0;
+        pet.actionDuration = 0;
+        pet.actionMaxDuration = 80;
+      } else {
+        pet.action = 'idle';
+        pet.actionDuration = 0;
+        pet.actionMaxDuration = 200;
+      }
+
+      document.getElementById('stat-action').textContent = action;
+    }
+
+    function update() {
+      pet.frame++;
+      pet.actionDuration++;
+
+      pet.blinkTimer++;
+      if (pet.blinkTimer > 120 + Math.random() * 100) {
+        pet.isBlinking = true;
+        pet.blinkTimer = 0;
+        setTimeout(() => pet.isBlinking = false, 150);
+      }
+
+      if (pet.action === 'sleep') {
+        pet.energy = Math.min(100, pet.energy + 0.08);
+      } else {
+        pet.energy = Math.max(0, pet.energy - 0.003);
+      }
+      if (pet.action === 'eat') {
+        pet.hunger = Math.min(100, pet.hunger + 0.4);
+      } else {
+        pet.hunger = Math.max(0, pet.hunger - 0.002);
+      }
+
+      if (pet.action === 'jump') {
+        pet.bounceVel += 0.55;
+        pet.bounceY += pet.bounceVel;
+        if (pet.bounceY >= 0) {
+          pet.bounceY = 0;
+          if (Math.abs(pet.bounceVel) > 2) {
+            pet.bounceVel = -pet.bounceVel * 0.45;
+          } else {
+            pet.bounceVel = 0;
+          }
+        }
+      }
+
+      if (pet.action === 'dance') pet.danceAngle += 0.12;
+
+      if (pet.action === 'wave') {
+        pet.waveAngle = (pet.waveAngle || 0) + 0.18;
+      }
+
+      if (pet.action === 'spin') {
+        pet.spinAngle += 0.2;
+        if (pet.spinAngle >= Math.PI * 2) pet.spinAngle = 0;
+      }
+
+      if (pet.isWalking && pet.targetX !== null) {
+        const dx = pet.targetX - pet.x;
+        const dy = pet.targetY - pet.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 3 || pet.actionDuration > pet.actionMaxDuration) {
+          pet.isWalking = false; pet.targetX = null; pet.targetY = null;
+          pet.action = 'idle';
+          if (pet._pendingInteract) {
+            doInteract(pet._pendingInteract);
+            pet._pendingInteract = null;
+          }
+        } else {
+          pet.x += (dx / dist) * pet.walkSpeed;
+          pet.y += (dy / dist) * pet.walkSpeed;
+          pet.dir = dx > 0 ? 1 : -1;
+        }
+      }
+
+      if (pet.actionDuration > pet.actionMaxDuration && pet.action !== 'idle' && pet.action !== 'walk' && pet.action !== 'sleep') {
+        pet.action = 'idle';
+        pet.actionDuration = 0;
+      }
+
+      tickObjects();
+      updateStats();
+      drawPet();
+      requestAnimationFrame(update);
+    }
+
+    function drawPet() {
+      ctx.clearRect(0, 0, 96, 96);
+      ctx.save();
+      ctx.translate(48, 48 + pet.bounceY);
+
+      let sx = 1, sy = 1;
+      if (pet.action === 'jump' && pet.bounceY < 0) {
+        const speed = Math.abs(pet.bounceVel);
+        sy = 1 + speed * 0.012;
+        sx = 1 - speed * 0.006;
+      }
+      ctx.scale(pet.dir * sx, sy);
+
+      if (pet.action === 'dance') {
+        const t = pet.danceAngle;
+        ctx.translate(Math.sin(t * 2) * 4, Math.abs(Math.sin(t * 3)) * -5);
+        ctx.rotate(Math.sin(t) * 0.2);
+      }
+      if (pet.action === 'spin') ctx.rotate(pet.spinAngle);
+
+      const base = settings.color;
+      const dark = shadeColor(base, -0.2);
+      const light = shadeColor(base, 0.3);
+
+      const draw = { cat: drawCat, dog: drawDog, rabbit: drawRabbit, bird: drawBird, hamster: drawHamster };
+      (draw[settings.petType] || draw.cat)(ctx, base, dark, light);
+
+      if (pet.action === 'wave') drawWaveArm(ctx, base, dark);
+      if (pet.action === 'jump' && pet.bounceY < -5) drawJumpLines(ctx);
+      if (pet.action === 'dance') drawDanceNotes(ctx);
+
+      drawOutfit(ctx);
+      drawExpression(ctx);
+      ctx.restore();
+    }
+
+    function drawWaveArm(ctx, base, dark) {
+      const t = pet.waveAngle || 0;
+      ctx.save();
+      ctx.translate(14, -2);
+      ctx.rotate(-0.3 + Math.sin(t) * 0.6);
+      ctx.fillStyle = base;
+      ctx.beginPath();
+      ctx.ellipse(0, -10, 5, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = shadeColor(base, 0.3);
+      ctx.beginPath();
+      ctx.arc(0, -18, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawJumpLines(ctx) {
+      ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 3]);
+      for (let i = 0; i < 3; i++) {
+        const y = 26 + i * 6;
+        const spread = 6 + i * 3;
+        ctx.beginPath();
+        ctx.moveTo(-spread, y); ctx.lineTo(spread, y);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+
+    function drawDanceNotes(ctx) {
+      const t = pet.danceAngle;
+      ctx.fillStyle = '#e91e63';
+      ctx.font = '10px sans-serif';
+      const notes = ['♪', '♫', '♩'];
+      for (let i = 0; i < 3; i++) {
+        const angle = t * 1.5 + i * 2.1;
+        const nx = Math.cos(angle) * 25;
+        const ny = -25 + Math.sin(angle * 0.7) * 8 - i * 5;
+        const alpha = 0.4 + Math.sin(t + i) * 0.3;
+        ctx.globalAlpha = alpha;
+        ctx.fillText(notes[i], nx, ny);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawCat(ctx, base, dark, light) {
+      const f = pet.frame;
+      const w = pet.isWalking ? Math.sin(f * 0.3) * 2 : 0;
+      ctx.fillStyle = base;
+      ctx.beginPath(); ctx.ellipse(0, 8, 18, 16, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = light;
+      ctx.beginPath(); ctx.ellipse(0, 12, 10, 9, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = base; ctx.lineWidth = 4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-16, 10); ctx.quadraticCurveTo(-28, -5 + w, -22, -18 + Math.sin(f * 0.15) * 5); ctx.stroke();
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = base;
+      ctx.beginPath(); ctx.arc(0, -16, 16, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-12, -28); ctx.lineTo(-8, -40); ctx.lineTo(-2, -26); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2, -26); ctx.lineTo(8, -40); ctx.lineTo(12, -28); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ffb6c1';
+      ctx.beginPath(); ctx.moveTo(-10, -28); ctx.lineTo(-8, -36); ctx.lineTo(-4, -27); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(4, -27); ctx.lineTo(8, -36); ctx.lineTo(10, -28); ctx.fill();
+      if (pet.isBlinking) { ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-7, -18); ctx.lineTo(-3, -16); ctx.stroke(); ctx.beginPath(); ctx.moveTo(3, -16); ctx.lineTo(7, -18); ctx.stroke(); }
+      else { ctx.fillStyle = '#333'; ctx.beginPath(); ctx.ellipse(-5, -17, 3, 3.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.ellipse(5, -17, 3, 3.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-4, -18, 1.2, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(6, -18, 1.2, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#ff69b4'; ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(-2, -11); ctx.lineTo(2, -11); ctx.fill();
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(0, -11); ctx.lineTo(-4, -8); ctx.moveTo(0, -11); ctx.lineTo(4, -8); ctx.stroke();
+      ctx.strokeStyle = '#666'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(-16, -14); ctx.lineTo(-6, -12); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-15, -10); ctx.lineTo(-6, -10); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(6, -12); ctx.lineTo(16, -14); ctx.stroke(); ctx.beginPath(); ctx.moveTo(6, -10); ctx.lineTo(15, -10); ctx.stroke();
+      ctx.fillStyle = base;
+      ctx.beginPath(); ctx.ellipse(-10, 22 + w, 6, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(10, 22 + w, 6, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+
+    function drawDog(ctx, base, dark, light) {
+      const f = pet.frame; const w = pet.isWalking ? Math.sin(f * 0.3) * 2 : 0;
+      ctx.fillStyle = base; ctx.beginPath(); ctx.ellipse(0, 8, 18, 16, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = light; ctx.beginPath(); ctx.ellipse(0, 12, 10, 9, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = base; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-14, 2); ctx.quadraticCurveTo(-22, -10 + Math.sin(f * 0.3) * 8, -18, -16 + Math.sin(f * 0.3) * 10); ctx.stroke();
+      ctx.fillStyle = base; ctx.beginPath(); ctx.arc(0, -14, 16, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = dark; ctx.beginPath(); ctx.ellipse(-14, -10, 6, 12, -0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.ellipse(14, -10, 6, 12, 0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      if (pet.isBlinking) { ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-7, -16); ctx.lineTo(-3, -14); ctx.stroke(); ctx.beginPath(); ctx.moveTo(3, -14); ctx.lineTo(7, -16); ctx.stroke(); }
+      else { ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(-5, -15, 3, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(5, -15, 3, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-4, -16, 1.2, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(6, -16, 1.2, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#333'; ctx.beginPath(); ctx.ellipse(0, -10, 3, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+      if (pet.action !== 'sleep') { ctx.fillStyle = '#ff69b4'; ctx.beginPath(); ctx.ellipse(0, -6, 2, 3 + Math.sin(f * 0.2), 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = base; ctx.beginPath(); ctx.ellipse(-10, 22 + w, 6, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.ellipse(10, 22 + w, 6, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+
+    function drawRabbit(ctx, base, dark, light) {
+      const f = pet.frame; const w = pet.isWalking ? Math.sin(f * 0.3) * 2 : 0;
+      ctx.fillStyle = base; ctx.beginPath(); ctx.ellipse(0, 10, 16, 14, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = light; ctx.beginPath(); ctx.ellipse(0, 14, 9, 8, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = base; ctx.beginPath(); ctx.arc(0, -10, 14, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(-6, -34, 5, 16, -0.15, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.ellipse(6, -34, 5, 16, 0.15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ffb6c1'; ctx.beginPath(); ctx.ellipse(-6, -34, 3, 12, -0.15, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.ellipse(6, -34, 3, 12, 0.15, 0, Math.PI * 2); ctx.fill();
+      if (pet.isBlinking) { ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-6, -12); ctx.lineTo(-2, -10); ctx.stroke(); ctx.beginPath(); ctx.moveTo(2, -10); ctx.lineTo(6, -12); ctx.stroke(); }
+      else { ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(-4, -11, 3, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(4, -11, 3, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-3, -12, 1.2, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(5, -12, 1.2, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#ff69b4'; ctx.beginPath(); ctx.arc(0, -7, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(-3, -2); ctx.moveTo(0, -5); ctx.lineTo(3, -2); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-12, 14, 6, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = base; ctx.beginPath(); ctx.ellipse(-8, 22 + w, 5, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.ellipse(8, 22 + w, 5, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+
+    function drawBird(ctx, base, dark, light) {
+      const f = pet.frame; const wo = Math.sin(f * 0.3) * 12;
+      ctx.fillStyle = base; ctx.beginPath(); ctx.ellipse(0, 4, 14, 12, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = light; ctx.beginPath(); ctx.ellipse(0, 8, 9, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = dark; ctx.beginPath(); ctx.ellipse(-14, 0 + wo, 10, 6, -0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.ellipse(14, 0 + wo, 10, 6, 0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = base; ctx.beginPath(); ctx.arc(0, -12, 11, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = dark; ctx.beginPath(); ctx.moveTo(-2, -22); ctx.lineTo(0, -30); ctx.lineTo(2, -22); ctx.fill();
+      if (pet.isBlinking) { ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-5, -13); ctx.lineTo(-2, -11); ctx.stroke(); ctx.beginPath(); ctx.moveTo(2, -11); ctx.lineTo(5, -13); ctx.stroke(); }
+      else { ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(-3, -12, 2.5, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(3, -12, 2.5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-2, -13, 1, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(4, -13, 1, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#ff9800'; ctx.beginPath(); ctx.moveTo(-2, -7); ctx.lineTo(0, -3); ctx.lineTo(2, -7); ctx.fill();
+      ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-4, 16); ctx.lineTo(-6, 22); ctx.moveTo(-4, 16); ctx.lineTo(-2, 22); ctx.stroke(); ctx.beginPath(); ctx.moveTo(4, 16); ctx.lineTo(2, 22); ctx.moveTo(4, 16); ctx.lineTo(6, 22); ctx.stroke();
+    }
+
+    function drawHamster(ctx, base, dark, light) {
+      const f = pet.frame; const w = pet.isWalking ? Math.sin(f * 0.3) * 1.5 : 0;
+      ctx.fillStyle = base; ctx.beginPath(); ctx.ellipse(0, 8, 20, 17, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = light; ctx.beginPath(); ctx.ellipse(0, 12, 13, 11, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffb6c1'; ctx.beginPath(); ctx.ellipse(-14, -4, 6, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.ellipse(14, -4, 6, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = base; ctx.beginPath(); ctx.arc(0, -10, 14, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(-10, -22, 5, 5, -0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.ellipse(10, -22, 5, 5, 0.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ffb6c1'; ctx.beginPath(); ctx.arc(-10, -22, 3, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(10, -22, 3, 0, Math.PI * 2); ctx.fill();
+      if (pet.isBlinking) { ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-6, -12); ctx.lineTo(-2, -10); ctx.stroke(); ctx.beginPath(); ctx.moveTo(2, -10); ctx.lineTo(6, -12); ctx.stroke(); }
+      else { ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(-4, -11, 3, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(4, -11, 3, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-3, -12, 1.3, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(5, -12, 1.3, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#ff69b4'; ctx.beginPath(); ctx.arc(0, -7, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = base; ctx.beginPath(); ctx.ellipse(-10, 22 + w, 5, 3.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.ellipse(10, 22 + w, 5, 3.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+
+    function drawOutfit(ctx) {
+      const o = settings.outfit;
+      if (o === 'hat') { ctx.fillStyle = '#333'; ctx.fillRect(-14, -38, 28, 6); ctx.fillRect(-8, -52, 16, 16); ctx.fillStyle = '#e91e63'; ctx.fillRect(-8, -46, 16, 3); }
+      else if (o === 'bow') { ctx.fillStyle = '#e91e63'; ctx.beginPath(); ctx.moveTo(0, -28); ctx.bezierCurveTo(-10, -34, -14, -26, -6, -24); ctx.bezierCurveTo(-14, -22, -10, -14, 0, -20); ctx.fill(); ctx.beginPath(); ctx.moveTo(0, -28); ctx.bezierCurveTo(10, -34, 14, -26, 6, -24); ctx.bezierCurveTo(14, -22, 10, -14, 0, -20); ctx.fill(); ctx.beginPath(); ctx.arc(0, -24, 2, 0, Math.PI * 2); ctx.fill(); }
+      else if (o === 'scarf') { ctx.fillStyle = '#f44336'; ctx.beginPath(); ctx.ellipse(0, -2, 18, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(10, -2, 6, 14); ctx.fillRect(14, 6, 6, 10); }
+      else if (o === 'sunglasses') { ctx.fillStyle = '#333'; ctx.fillRect(-12, -20, 10, 8); ctx.fillRect(2, -20, 10, 8); ctx.fillRect(-2, -18, 4, 2); ctx.fillStyle = 'rgba(100,200,255,0.4)'; ctx.fillRect(-10, -18, 6, 4); ctx.fillRect(4, -18, 6, 4); }
+      else if (o === 'crown') { ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.moveTo(-10, -28); ctx.lineTo(-8, -38); ctx.lineTo(-4, -30); ctx.lineTo(0, -40); ctx.lineTo(4, -30); ctx.lineTo(8, -38); ctx.lineTo(10, -28); ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.stroke(); ctx.fillStyle = '#f44336'; ctx.beginPath(); ctx.arc(0, -32, 2, 0, Math.PI * 2); ctx.fill(); }
+    }
+
+    function drawExpression(ctx) {
+      const e = settings.expression;
+      if (e === 'love') { ctx.fillStyle = '#e91e63'; drawHeart(ctx, -12, -26, 5); drawHeart(ctx, 8, -28, 4); }
+      else if (e === 'angry') { ctx.strokeStyle = '#f44336'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-8, -24); ctx.lineTo(-4, -22); ctx.stroke(); ctx.beginPath(); ctx.moveTo(4, -22); ctx.lineTo(8, -24); ctx.stroke(); }
+      else if (e === 'sad') { ctx.strokeStyle = '#2196f3'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-5, -14); ctx.lineTo(-3, -10); ctx.stroke(); ctx.fillStyle = '#2196f3'; ctx.beginPath(); ctx.arc(-3, -9, 1.5, 0, Math.PI * 2); ctx.fill(); }
+      else if (e === 'surprised') { ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(0, -8, 3, 0, Math.PI * 2); ctx.fill(); }
+      else if (e === 'sleepy') { ctx.fillStyle = '#2196f3'; ctx.font = '10px sans-serif'; ctx.fillText('z', 12, -20); ctx.font = '14px sans-serif'; ctx.fillText('Z', 18, -28); }
+    }
+
+    function drawHeart(ctx, x, y, s) { ctx.beginPath(); ctx.moveTo(x, y + s / 4); ctx.quadraticCurveTo(x, y, x + s / 2, y); ctx.quadraticCurveTo(x + s, y, x + s, y + s / 4); ctx.quadraticCurveTo(x + s, y + s / 2, x + s / 2, y + s * 0.8); ctx.lineTo(x, y + s * 1.2); ctx.lineTo(x - s / 2, y + s * 0.8); ctx.quadraticCurveTo(x - s, y + s / 2, x - s, y + s / 4); ctx.quadraticCurveTo(x - s, y, x - s / 2, y); ctx.quadraticCurveTo(x, y, x, y + s / 4); ctx.fill(); }
+
+    function say(text) {
+      bubble.textContent = text;
+      bubble.style.display = 'block';
+      bubble.style.left = Math.max(10, Math.min(window.innerWidth - 290, pet.x + 48 - bubble.offsetWidth / 2)) + 'px';
+      bubble.style.top = Math.max(10, pet.y - 10 - bubble.offsetHeight - 10) + 'px';
+      bubble.style.opacity = '1';
+      clearTimeout(bubble._timer);
+      bubble._timer = setTimeout(() => { bubble.style.opacity = '0'; setTimeout(() => bubble.style.display = 'none', 400); }, 5000);
+    }
+
+    function updateStats() {
+      document.getElementById('stat-mood').textContent = pet.mood;
+      document.getElementById('stat-energy').textContent = Math.round(pet.energy);
+      document.getElementById('stat-hunger').textContent = Math.round(pet.hunger);
+      if (pet.energy < 30 || pet.hunger < 30) { pet.mood = '不开心'; document.getElementById('stat-mood').textContent = '😢 不开心'; }
+      else if (pet.action === 'dance' || pet.action === 'wave') { pet.mood = '超开心'; document.getElementById('stat-mood').textContent = '🎉 超开心'; }
+      else if (pet.action === 'sleep') { pet.mood = '困困'; document.getElementById('stat-mood').textContent = '😴 困困'; }
+      else { pet.mood = '开心'; document.getElementById('stat-mood').textContent = '😊 开心'; }
+    }
+
+    canvas.addEventListener('mousedown', e => { pet.isDragging = true; pet.dragOffsetX = e.clientX - pet.x; pet.dragOffsetY = e.clientY - pet.y; pet.isWalking = false; canvas.style.cursor = 'grabbing'; });
+    window.addEventListener('mousemove', e => { if (!pet.isDragging) return; pet.x = e.clientX - pet.dragOffsetX; pet.y = e.clientY - pet.dragOffsetY; });
+    window.addEventListener('mouseup', () => { if (pet.isDragging) { pet.isDragging = false; canvas.style.cursor = 'grab'; addMemory('user-action', '用户把我抓起来放到了新位置'); } });
+
+    function toggleChat() { const p = document.getElementById('chat-panel'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; }
+    function toggleSettings() { const p = document.getElementById('settings-panel'); p.style.display = p.style.display === 'block' ? 'none' : 'block'; }
+    function toggleMemory() { const p = document.getElementById('memory-panel'); p.style.display = p.style.display === 'flex' ? 'none' : 'flex'; renderMemory(); }
+
+    function addChatMsg(text, who) {
+      const el = document.createElement('div');
+      el.className = 'chat-msg ' + who;
+      el.textContent = text;
+      document.getElementById('chat-messages').appendChild(el);
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    async function sendChat() {
+      const input = document.getElementById('chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      addChatMsg(text, 'user');
+      addMemory('user-chat', text);
+      say('让我想想...🤔');
+
+      const decision = await askAI(text);
+      if (decision) executeDecision(decision);
+    }
+
+    pet.x = window.innerWidth / 2 - 48;
+    pet.y = window.innerHeight / 2 - 48;
+    canvas.style.left = pet.x + 'px';
+    canvas.style.top = pet.y + 'px';
+
+    function gameLoop() {
+      canvas.style.left = pet.x + 'px';
+      canvas.style.top = pet.y + 'px';
+      if (bubble.style.display === 'block') {
+        bubble.style.left = Math.max(10, Math.min(window.innerWidth - 290, pet.x + 48 - bubble.offsetWidth / 2)) + 'px';
+        bubble.style.top = Math.max(10, pet.y - 10 - bubble.offsetHeight - 10) + 'px';
+      }
+      if (thoughtBubble.style.display === 'block') {
+        thoughtBubble.style.left = (pet.x + 48) + 'px';
+        thoughtBubble.style.top = (pet.y - 30) + 'px';
+      }
+    }
+    setInterval(gameLoop, 16);
+
+    document.getElementById('api-url').addEventListener('change', function () { settings.apiUrl = this.value; });
+    document.getElementById('model-name').addEventListener('change', function () { settings.model = this.value; });
+    document.getElementById('decision-interval').addEventListener('change', function () { settings.decisionInterval = parseInt(this.value) || 10; });
+
+    update();
+    setTimeout(() => autonomousLoop(), 2000);
+  </script>
+</body>
+
+</html>
