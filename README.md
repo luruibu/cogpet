@@ -60,7 +60,7 @@ python -m http.server 8080
 
 > ⚠️ **使用本地小模型时**：请务必关闭模型的**思考/推理模式（Thinking Mode）**。
 > 小模型开启思考后会输出大量无关内容，导致 JSON 解析失败，宠物行为完全不正常。
-> 在 LM Studio 中加载模型时，取消勾选 "Enable Thinking" 或类似选项。
+> 例如在 LM Studio 中，使用qwen3.5-4b模型。在提示模板中，修改jinja模板，在最上方加入{%- set enable_thinking = false %} 就可以永久关闭模型思考了。
 
 ## 🎮 交互方式
 
