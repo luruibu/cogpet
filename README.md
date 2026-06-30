@@ -6,7 +6,7 @@
 
 ## 截图
 
-![SpritePet 演示](pet1.png)
+![CogPet 演示](pet1.png)
 
 ## ✨ 特性
 
@@ -14,123 +14,160 @@
 |------|------|
 | 🧠 **AI 自主决策** | 每隔几秒询问 LLM，根据能量、饱腹、心情、记忆自主决定行为 |
 | 🎨 **屏幕创造** | 在页面上生成食物、玩具、花朵、装饰品，和它共存在屏幕上 |
+| 🌐 **感知页面** | 读取页面标题、文本、图片，对当前网页内容发表评论 |
 | 💬 **有记忆的对话** | 记住你说过的每句话和它做过的每件事，对话有完整上下文 |
 | 🐾 **5 种宠物** | 猫、狗、兔子、小鸟、仓鼠，各有独特手绘造型 |
 | 🎭 **流畅动画** | 挥手、弹性跳跃、跳舞（带音符粒子）、转圈、睡觉、吃东西 |
-| 👔 **自定义外观** | 10 种主题色、5 种服饰（帽子/蝴蝶结/围巾/墨镜/皇冠）、7 种表情 |
-| 🌐 **零依赖** | 单个 HTML 文件，纯 Canvas 绘制，无任何框架 |
+| 👔 **自定义外观** | 10 种主题色、5 种服饰、7 种表情 |
+| 📦 **一行代码嵌入** | 任何网站加一个 `<script>` 标签即可使用 |
 
-## 🚀 快速开始
+## 🚀 快速开始（独立模式）
 
-### 1. 准备 LM Studio
-
-下载 [LM Studio](https://lmstudio.ai)，加载任意聊天模型。
-
-启动时添加 CORS 参数：
+直接打开 `pet.html` 即可体验：
 
 ```bash
-lmstudio --cors-allowed-origins "*"
-```
-
-或在 LM Studio 设置中允许所有来源的跨域请求。
-
-### 2. 运行
-
-直接打开 `pet.html`：
-
-```bash
-# 方式一：直接打开（可能有 CORS 问题）
-open pet.html
-
-# 方式二：本地服务器（推荐）
+# 用本地服务器打开（推荐，避免 CORS 问题）
+cd cogpet
 npx serve .
 # 或
 python -m http.server 8080
 ```
 
-访问 `http://localhost:3000/pet.html`（serve）或 `http://localhost:8080/pet.html`（python）。
-
-### 3. 配置
-
-页面右下角 ⚙ 设置面板可以修改：
-
-- **AI 模型地址** — 默认 `http://192.168.100.100:1234/v1/chat/completions`
-- **模型名称** — 默认 `qwen/qwen3.5-4b`
-- **决策间隔** — 宠物多久思考一次（默认 10 秒）
-
 > ⚠️ **使用本地小模型时**：请务必关闭模型的**思考/推理模式（Thinking Mode）**。
-> 小模型开启思考后会输出大量无关内容，导致 JSON 解析失败，宠物行为完全不正常。
-> 例如在 LM Studio 中，使用qwen3.5-4b模型。在提示模板中，修改jinja模板，在最上方加入{%- set enable_thinking = false %} 就可以永久关闭模型思考了。
+> 小模型开启思考后会输出大量无关内容，导致 JSON 解析失败。
+> 在 LM Studio 中，使用 qwen3.5-4b 模型时，在提示模板的最上方加入 `{%- set enable_thinking = false %}` 即可关闭。
 
-## 🎮 交互方式
+## 🌐 嵌入到你的网站
 
-| 操作 | 效果 |
+### 第 1 步：启动 CogPet 服务
+
+```bash
+cd cogpet/server
+npm install
+npm start
+```
+
+在 `server/index.js` 中配置你的 LLM API 地址和模型名（**不会暴露给第三方**）：
+
+```javascript
+const CONFIG = {
+  llmApiUrl: process.env.LLM_API_URL || 'http://your-llm-server:1234/v1/chat/completions',
+  llmModel: process.env.LLM_MODEL || 'your-model-name',
+  port: process.env.PORT || 3210,
+};
+```
+
+也可通过环境变量配置：
+
+```bash
+LLM_API_URL=http://192.168.1.x:1234/v1/chat/completions \
+LLM_MODEL=qwen3-8b \
+PORT=3210 \
+npm start
+```
+
+### 第 2 步：在你的网站中嵌入
+
+```html
+<script
+  src="http://localhost:3210/widget.js"
+  data-pet="cat"
+  data-color="#ff9800"
+  data-outfit="bow"
+  data-interval="10"
+  data-position="right"
+  data-scan="true">
+</script>
+```
+
+就这一行代码，宠物就会出现在你的页面上。
+
+### 可配置参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `data-pet` | `cat` | 宠物类型：`cat` / `dog` / `rabbit` / `bird` / `hamster` |
+| `data-color` | `#ff9800` | 主题色（hex） |
+| `data-outfit` | `none` | 服饰：`none` / `hat` / `bow` / `scarf` / `sunglasses` / `crown` |
+| `data-interval` | `10` | 决策间隔（秒） |
+| `data-position` | `right` | 初始位置：`left` / `center` / `right` |
+| `data-scan` | `true` | 是否扫描页面内容：`true` / `false` |
+
+> 🔒 **安全**：LLM API 地址和模型名封装在服务端，第三方无法获取。
+
+## 🧩 工作原理
+
+```
+第三方网站                          CogPet 服务器
+    │                                    │
+    │  ① 加载 widget.js                  │
+    │ ─────────────────────────────────> │
+    │  ② 返回打包好的 JS（46KB）          │
+    │ <───────────────────────────────── │
+    │                                    │
+    │  ③ JS 注入 Shadow DOM 容器          │
+    │  ④ 扫描页面内容（标题/文本/图片）    │
+    │  ⑤ 每 N 秒 POST /api/chat          │
+    │     { petState, memory, pageCtx }   │
+    │ ─────────────────────────────────> │
+    │  ⑥ 服务端转发到 LLM API             │
+    │ <─────────── LLM 决策 ──────────── │
+    │  ⑦ 返回 { action, speech, ... }    │
+    │ <───────────────────────────────── │
+    │  ⑧ 宠物执行动作                     │
+```
+
+### 页面感知
+
+宠物可以"看到"当前页面的内容：
+
+- **页面标题和描述** — 知道你在看什么网站
+- **文章标题** — 可以评论 "这个标题好有趣！"
+- **图片** — 走到图片旁边说 "好漂亮的图片~"
+- **链接** — 发现页面上的链接
+- **页面类型** — 自动识别：文章/购物/视频/社交/代码
+
+### 页面交互动作
+
+| 动作 | 说明 |
 |------|------|
-| **拖拽** | 抓住宠物拖到新位置 |
-| **点击屏幕物品** | 宠物会走过去和它互动 |
-| **💬 聊天** | 和宠物对话，它会回应并记住 |
-| **🧠 让我想想** | 强制触发一次 AI 决策 |
-| **🧠 记忆** | 查看宠物的记忆时间线 |
+| `comment` | 对页面内容发表评论，走到相关位置 |
+| `react` | 对页面元素做出表情反应（❤️ 喜欢 / 😲 惊讶 / 🤔 好奇） |
+| `explore` | 走到页面某个区域探索 |
+| `create` | 在页面上创造食物、玩具、花朵等物品 |
 
-## 🧩 它是怎么工作的
+### Shadow DOM 隔离
 
-```
-┌─────────────────────────────────────────────┐
-│  每隔 N 秒                                    │
-│                                               │
-│  发送: 当前状态 + 记忆 + 用户消息              │
-│  ┌───────────┐                                │
-│  │  LLM API  │ → 返回 JSON: 动作 + 说话 + 表情 │
-│  └───────────┘                                │
-│                                               │
-│  执行: 移动 / 创造物品 / 跳舞 / 聊天 / ...     │
-│  记录: 写入记忆池，下次决策时一起发给 LLM       │
-└─────────────────────────────────────────────┘
-```
-
-### 可用动作
-
-- `idle` 发呆 | `walk` 散步 | `wave` 挥手 | `jump` 跳跃
-- `dance` 跳舞 | `sleep` 睡觉 | `eat` 吃东西 | `spin` 转圈
-- `create` 创造物品 | `interact` 和屏幕上的东西互动
-
-### 可创造的物品
-
-| 类型 | 内容 | 互动方式 |
-|------|------|---------|
-| 🍎 食物 | 🍊🍌🍇🍓🥕🍰🧁🍩🐟🍖 | 走过去吃掉（恢复饱腹度） |
-| ⚽ 玩具 | 🎈🪁🎯🧶🪀🎮 | 走过去玩 |
-| 🌸 自然 | 🌺🌻🌹🍀🌿⭐🌙☁️🦋 | 走过去欣赏 |
-| ✨ 装饰 | 💖🌟🎀🔮💎🏆 | 走过去看 |
-| 🛋️ 家具 | 📚💡🖼️🧸🪴 | 走过去使用 |
-
-### 记忆系统
-
-所有交互和行为都记录在统一的记忆池中：
-
-```
-[14:32:05] (pet-speech) 肚子饿了~吃点东西🍎
-[14:32:05] (pet-action) 我决定吃东西
-[14:32:15] (pet-speech) 好吃！🤤 🍎
-[14:33:01] (user-chat) 你好呀
-[14:33:02] (pet-speech) 你好呀~ (◕ᴗ◕✿)
-```
-
-每次 LLM 决策时，最近 20 条记忆会作为上下文发送，让宠物能延续话题、引用之前的经历。
+宠物使用 Shadow DOM 渲染，样式完全隔离，不会影响宿主页面的任何样式和脚本。
 
 ## 📁 项目结构
 
 ```
-pet.html    ← 就这一个文件，所有逻辑都在里面
-README.md
-LICENSE
+cogpet/
+├── server/
+│   ├── index.js              # Express 服务（LLM 代理 + Widget 托管）
+│   ├── package.json
+│   └── public/
+│       └── widget.js         # 打包后的嵌入脚本（单文件 46KB）
+├── src/
+│   ├── engine.js             # 宠物核心引擎（状态机 + Canvas 渲染）
+│   ├── scanner.js            # 页面内容扫描器
+│   ├── llm.js                # LLM 调用 + Prompt 构建
+│   ├── memory.js             # 记忆系统（localStorage 持久化）
+│   └── objects.js            # 世界物品系统
+├── scripts/
+│   └── build.js              # 打包脚本（node scripts/build.js）
+├── pet.html                  # 独立演示版
+├── README.md
+└── LICENSE
 ```
 
 ## 🔧 技术栈
 
-- **渲染**: HTML5 Canvas（手绘像素风格）
+- **渲染**: HTML5 Canvas + Shadow DOM（样式完全隔离）
 - **AI**: OpenAI 兼容 API（支持 LM Studio、Ollama、vLLM 等）
-- **依赖**: 无。零框架，零 npm 包，单文件运行。
+- **后端**: Node.js + Express（LLM 代理，隐藏 API 密钥）
+- **打包**: 自定义打包脚本，输出单文件 widget.js
 
 ## 📄 License
 
