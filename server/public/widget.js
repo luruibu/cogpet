@@ -80,12 +80,14 @@ class PageScanner {
         description: this._getDescription(),
         headings: this._getHeadings(),
         images: this._getImages(),
+        paragraphs: this._getParagraphs(),
         links: this._getLinks(),
         text: this._getMainText(),
         pageType: this._guessPageType(),
+        scrollY: window.scrollY || window.pageYOffset || 0,
       };
     } catch (e) {
-      this.lastScan = { title: document.title, pageType: 'unknown', text: '', headings: [], images: [], links: [] };
+      this.lastScan = { title: document.title, pageType: 'unknown', text: '', headings: [], images: [], paragraphs: [], links: [], scrollY: 0 };
     }
     return this.lastScan;
   }
@@ -96,10 +98,90 @@ class PageScanner {
     const parts = [`页面类型: ${s.pageType}`, `标题: "${s.title}"`];
     if (s.description) parts.push(`描述: "${s.description.slice(0, 100)}"`);
     if (s.headings.length) parts.push(`标题:\n${s.headings.slice(0, 5).map(h => `- "${h}"`).join('\n')}`);
-    if (s.images.length) parts.push(`图片:\n${s.images.slice(0, 5).map(i => `- [图片] ${i.alt || '无描述'} (位置: ${Math.round(i.x)},${Math.round(i.y)})`).join('\n')}`);
-    if (s.links.length) parts.push(`链接:\n${s.links.slice(0, 5).map(l => `- [链接] "${l.text.slice(0, 30)}"`).join('\n')}`);
+    if (s.images.length) parts.push(`图片:\n${s.images.slice(0, 5).map(i => `- [图片] ${i.alt || '无描述'} (索引: ${i.idx}, 文档Y: ${Math.round(i.docY)}, 视口Y: ${Math.round(i.y)})`).join('\n')}`);
+    if (s.paragraphs.length) parts.push(`段落:\n${s.paragraphs.slice(0, 5).map(p => `- [段落${p.idx}] "${p.text.slice(0, 60)}" (文档Y: ${Math.round(p.docY)})`).join('\n')}`);
+    if (s.links.length) parts.push(`链接:\n${s.links.slice(0, 5).map(l => `- [链接${l.idx}] "${l.text.slice(0, 30)}" (文档Y: ${Math.round(l.docY)})`).join('\n')}`);
     if (s.text) parts.push(`正文摘要: "${s.text.slice(0, 300)}"`);
+    if (s.scrollY !== undefined) parts.push(`页面已滚动: ${Math.round(s.scrollY)}px`);
     return parts.join('\n');
+  }
+
+  // 将指定图片滚动到视口内
+  scrollToImage(index) {
+    const imgs = this.lastScan?.images;
+    if (!imgs || !imgs[index]) return false;
+    const img = imgs[index];
+    if (!img.el) return false;
+    const rect = img.el.getBoundingClientRect();
+    // 如果图片大部分在视口外，滚动使其居中
+    if (rect.top < 0 || rect.bottom > window.innerHeight || rect.left < 0 || rect.right > window.innerWidth) {
+      img.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return true;
+    }
+    return false;
+  }
+
+  // 滚动到页面指定Y位置
+  scrollToY(y) {
+    const target = y - window.innerHeight / 2;
+    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+    const clamped = Math.max(0, Math.min(maxScroll, target));
+    if (Math.abs((window.scrollY || window.pageYOffset || 0) - clamped) > 50) {
+      window.scrollTo({ top: clamped, behavior: 'smooth' });
+      return true;
+    }
+    return false;
+  }
+
+  // 获取元素当前视口坐标 (如果还在DOM中)
+  getCurrentViewportPos(index) {
+    const imgs = this.lastScan?.images;
+    if (!imgs || !imgs[index] || !imgs[index].el) return null;
+    const rect = imgs[index].el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return null;
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, w: rect.width, h: rect.height };
+  }
+
+  scrollToParagraph(index) {
+    const ps = this.lastScan?.paragraphs;
+    if (!ps || !ps[index]) return false;
+    const p = ps[index];
+    if (!p.el) return false;
+    const rect = p.el.getBoundingClientRect();
+    if (rect.top < 0 || rect.bottom > window.innerHeight) {
+      p.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return true;
+    }
+    return false;
+  }
+
+  getCurrentParagraphPos(index) {
+    const ps = this.lastScan?.paragraphs;
+    if (!ps || !ps[index] || !ps[index].el) return null;
+    const rect = ps[index].el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return null;
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }
+
+  scrollToLink(index) {
+    const ls = this.lastScan?.links;
+    if (!ls || !ls[index]) return false;
+    const l = ls[index];
+    if (!l.el) return false;
+    const rect = l.el.getBoundingClientRect();
+    if (rect.top < 0 || rect.bottom > window.innerHeight) {
+      l.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return true;
+    }
+    return false;
+  }
+
+  getCurrentLinkPos(index) {
+    const ls = this.lastScan?.links;
+    if (!ls || !ls[index] || !ls[index].el) return null;
+    const rect = ls[index].el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return null;
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   }
 
   _getTitle() {
@@ -123,27 +205,58 @@ class PageScanner {
 
   _getImages() {
     const images = [];
+    let idx = 0;
     document.querySelectorAll('img').forEach(el => {
       const rect = el.getBoundingClientRect();
       if (rect.width < 30 || rect.height < 30) return;
-      if (rect.top > window.innerHeight || rect.left > window.innerWidth) return;
       images.push({
+        el, idx: idx++,
         alt: el.alt || '',
         src: el.src?.slice(0, 80) || '',
         x: rect.left + rect.width / 2,
         y: rect.top + rect.height / 2,
+        docY: (window.scrollY || window.pageYOffset || 0) + rect.top + rect.height / 2,
         w: rect.width,
         h: rect.height,
+        inViewport: !(rect.top > window.innerHeight || rect.left > window.innerWidth || rect.bottom < 0 || rect.right < 0),
       });
     });
     return images.slice(0, 8);
   }
 
+  _getParagraphs() {
+    const paragraphs = [];
+    let idx = 0;
+    document.querySelectorAll('p').forEach(el => {
+      const text = el.textContent.replace(/\s+/g, ' ').trim();
+      if (text.length < 10 || text.length > 500) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return;
+      paragraphs.push({
+        el, idx: idx++,
+        text: text.slice(0, 200),
+        docY: (window.scrollY || window.pageYOffset || 0) + rect.top + rect.height / 2,
+        inViewport: !(rect.top > window.innerHeight || rect.bottom < 0),
+      });
+    });
+    return paragraphs.slice(0, 8);
+  }
+
   _getLinks() {
     const links = [];
+    let idx = 0;
     document.querySelectorAll('a').forEach(el => {
       const text = el.textContent.trim();
-      if (text.length > 2 && text.length < 60) links.push({ text, href: el.href });
+      if (text.length < 3 || text.length > 60) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return;
+      links.push({
+        el, idx: idx++,
+        text,
+        href: el.href,
+        docY: (window.scrollY || window.pageYOffset || 0) + rect.top + rect.height / 2,
+        inViewport: !(rect.top > window.innerHeight || rect.bottom < 0),
+      });
     });
     return links.slice(0, 8);
   }
@@ -235,9 +348,9 @@ class LLMClient {
 - "spin" - 原地转圈
 - "create" - 在屏幕上创造东西（需要createType: food/toy/nature/decor/furniture）
 - "interact" - 和屏幕上的东西互动（需要interactObjIndex）
-- "comment" - 对当前页面内容发表评论（需要commentTarget: "heading"/"image"/"text"/"link" 和commentIndex）
+- "comment" - 对当前页面内容发表评论（需要commentTarget: "heading"/"image"/"text"/"link" 和commentIndex。text按段落索引，link按链接索引）
 - "react" - 对页面某个元素做出反应表情（需要reactTarget: "like"/"surprise"/"curious"/"cool"）
-- "explore" - 走到页面某个区域探索
+- "explore" - 走到页面某个区域探索（如果目标不在当前视口，pet会自动滚动页面过去）
 
 **可用的创造类型 (createType):**
 - "food" - 🍎🍊🍌🍇🍓🥕🍰🧁🍩🐟🍖
@@ -261,6 +374,10 @@ class LLMClient {
 9. 你可以创造有意义的东西组合
 10. 屏幕最多30个东西，适度创造
 11. 你的记忆会在"recentMemories"中提供
+12. 页面可以滚动，如果目标图片/区域不在当前视口，pet会自动滚动页面过去。你可以在"position"中看到当前滚动位置（scrollY）和页面总高度（pageHeight）
+13. 尝试探索页面不同区域，包括屏幕下方需要滚动才能看到的内容
+14. 你可以阅读并评论页面上的段落文字（commentTarget: "text"），也可以点击/评论链接（commentTarget: "link"）
+15. 对段落评论时，先看看段落内容，给出有意义的回应，不只是简单说"这段文字很有趣"
 
 **页面上下文:**
 ${pageContext || '（无页面信息）'}
@@ -554,6 +671,7 @@ class CogPet {
         padding: 4px 10px; box-shadow: 2px 2px 0 #333;
         font: 600 11px 'Segoe UI', sans-serif; pointer-events: auto;
         cursor: pointer; user-select: none;
+        color: ${this.config.bubbleColor};
       }
       .cogpet-dot {
         width: 8px; height: 8px; border-radius: 50%; background: #4caf50;
@@ -949,7 +1067,7 @@ class CogPet {
       hunger: Math.round(this.pet.hunger),
       mood: this.pet.mood,
       currentAction: this.pet.action,
-      position: { x: Math.round(this.pet.x), y: Math.round(this.pet.y), screenWidth: window.innerWidth, screenHeight: window.innerHeight },
+      position: { x: Math.round(this.pet.x), y: Math.round(this.pet.y), screenWidth: window.innerWidth, screenHeight: window.innerHeight, scrollY: Math.round(window.scrollY || window.pageYOffset || 0), pageHeight: document.documentElement.scrollHeight },
       recentMemories: this.memory.getRecent(8),
       worldObjects: this.objects.toPromptArray(),
       petType: this.config.petType,
@@ -1078,8 +1196,30 @@ class CogPet {
           target = scan.headings[d.commentIndex || 0];
         } else if (d.commentTarget === 'image' && scan.images.length) {
           const img = scan.images[d.commentIndex || 0];
-          if (img) { p.targetX = img.x - 48; p.targetY = img.y; p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 300; }
+          if (img) {
+            if (img.el && !img.inViewport) this.scanner.scrollToImage(d.commentIndex || 0);
+            const pos = img.el ? this.scanner.getCurrentViewportPos(d.commentIndex || 0) : null;
+            p.targetX = (pos ? pos.x : img.x) - 48;
+            p.targetY = (pos ? pos.y : img.y) - 48;
+            p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 300;
+          }
           target = img?.alt || '这张图片';
+        } else if (d.commentTarget === 'text' && scan.paragraphs.length) {
+          const par = scan.paragraphs[d.commentIndex || 0];
+          if (par) {
+            if (par.el && !par.inViewport) this.scanner.scrollToParagraph(d.commentIndex || 0);
+            const pos = par.el ? this.scanner.getCurrentParagraphPos(d.commentIndex || 0) : null;
+            if (pos) { p.targetX = pos.x - 48; p.targetY = pos.y - 48; p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 300; }
+          }
+          target = par?.text || '这段文字';
+        } else if (d.commentTarget === 'link' && scan.links.length) {
+          const lnk = scan.links[d.commentIndex || 0];
+          if (lnk) {
+            if (lnk.el && !lnk.inViewport) this.scanner.scrollToLink(d.commentIndex || 0);
+            const pos = lnk.el ? this.scanner.getCurrentLinkPos(d.commentIndex || 0) : null;
+            if (pos) { p.targetX = pos.x - 48; p.targetY = pos.y - 48; p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 300; }
+          }
+          target = lnk?.text || '这个链接';
         } else {
           target = scan.title;
         }
@@ -1093,14 +1233,33 @@ class CogPet {
       if (!d.speech) this._say(reactions[d.reactTarget] || '✨');
       p.action = 'wave'; p.waveAngle = 0; p.actionDuration = 0; p.actionMaxDuration = 80;
     } else if (d.action === 'explore') {
-      const tx = d.targetX ?? (Math.random() * window.innerWidth * 0.8 + window.innerWidth * 0.1);
-      const ty = d.targetY ?? (Math.random() * window.innerHeight * 0.6 + window.innerHeight * 0.1);
-      p.targetX = tx; p.targetY = ty; p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 500;
+      let tx = d.targetX, ty = d.targetY;
+      if (tx == null) tx = 80 + Math.random() * (window.innerWidth - 200);
+      if (ty == null) ty = 80 + Math.random() * (window.innerHeight - 250);
+      // 如果目标在视口外，滚动页面
+      if (ty > window.innerHeight - 50) {
+        this.scanner.scrollToY((window.scrollY || window.pageYOffset || 0) + (ty - window.innerHeight * 0.4));
+        ty = window.innerHeight * 0.6;
+      } else if (ty < -50) {
+        this.scanner.scrollToY((window.scrollY || window.pageYOffset || 0) + ty - window.innerHeight * 0.2);
+        ty = Math.max(80, ty + window.innerHeight * 0.2);
+      }
+      p.targetX = Math.max(20, Math.min(window.innerWidth - 120, tx));
+      p.targetY = Math.max(20, Math.min(window.innerHeight - 140, ty));
+      p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 500;
       if (!d.speech) this._say('去看看那边~');
     } else if (d.action === 'walk') {
       let tx = d.targetX, ty = d.targetY;
       if (tx == null) tx = 80 + Math.random() * (window.innerWidth - 200);
       if (ty == null) ty = 80 + Math.random() * (window.innerHeight - 250);
+      // 如果目标在视口外，滚动页面
+      if (ty > window.innerHeight - 50) {
+        this.scanner.scrollToY((window.scrollY || window.pageYOffset || 0) + (ty - window.innerHeight * 0.4));
+        ty = window.innerHeight * 0.6;
+      } else if (ty < -50) {
+        this.scanner.scrollToY((window.scrollY || window.pageYOffset || 0) + ty - window.innerHeight * 0.2);
+        ty = Math.max(80, ty + window.innerHeight * 0.2);
+      }
       tx = Math.max(20, Math.min(window.innerWidth - 120, tx));
       ty = Math.max(20, Math.min(window.innerHeight - 140, ty));
       p.targetX = tx; p.targetY = ty; p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 600;

@@ -106,6 +106,7 @@ export class CogPet {
         padding: 4px 10px; box-shadow: 2px 2px 0 #333;
         font: 600 11px 'Segoe UI', sans-serif; pointer-events: auto;
         cursor: pointer; user-select: none;
+        color: ${this.config.bubbleColor};
       }
       .cogpet-dot {
         width: 8px; height: 8px; border-radius: 50%; background: #4caf50;
@@ -501,7 +502,7 @@ export class CogPet {
       hunger: Math.round(this.pet.hunger),
       mood: this.pet.mood,
       currentAction: this.pet.action,
-      position: { x: Math.round(this.pet.x), y: Math.round(this.pet.y), screenWidth: window.innerWidth, screenHeight: window.innerHeight },
+      position: { x: Math.round(this.pet.x), y: Math.round(this.pet.y), screenWidth: window.innerWidth, screenHeight: window.innerHeight, scrollY: Math.round(window.scrollY || window.pageYOffset || 0), pageHeight: document.documentElement.scrollHeight },
       recentMemories: this.memory.getRecent(8),
       worldObjects: this.objects.toPromptArray(),
       petType: this.config.petType,
@@ -630,8 +631,30 @@ export class CogPet {
           target = scan.headings[d.commentIndex || 0];
         } else if (d.commentTarget === 'image' && scan.images.length) {
           const img = scan.images[d.commentIndex || 0];
-          if (img) { p.targetX = img.x - 48; p.targetY = img.y; p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 300; }
+          if (img) {
+            if (img.el && !img.inViewport) this.scanner.scrollToImage(d.commentIndex || 0);
+            const pos = img.el ? this.scanner.getCurrentViewportPos(d.commentIndex || 0) : null;
+            p.targetX = (pos ? pos.x : img.x) - 48;
+            p.targetY = (pos ? pos.y : img.y) - 48;
+            p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 300;
+          }
           target = img?.alt || '这张图片';
+        } else if (d.commentTarget === 'text' && scan.paragraphs.length) {
+          const par = scan.paragraphs[d.commentIndex || 0];
+          if (par) {
+            if (par.el && !par.inViewport) this.scanner.scrollToParagraph(d.commentIndex || 0);
+            const pos = par.el ? this.scanner.getCurrentParagraphPos(d.commentIndex || 0) : null;
+            if (pos) { p.targetX = pos.x - 48; p.targetY = pos.y - 48; p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 300; }
+          }
+          target = par?.text || '这段文字';
+        } else if (d.commentTarget === 'link' && scan.links.length) {
+          const lnk = scan.links[d.commentIndex || 0];
+          if (lnk) {
+            if (lnk.el && !lnk.inViewport) this.scanner.scrollToLink(d.commentIndex || 0);
+            const pos = lnk.el ? this.scanner.getCurrentLinkPos(d.commentIndex || 0) : null;
+            if (pos) { p.targetX = pos.x - 48; p.targetY = pos.y - 48; p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 300; }
+          }
+          target = lnk?.text || '这个链接';
         } else {
           target = scan.title;
         }
@@ -645,14 +668,33 @@ export class CogPet {
       if (!d.speech) this._say(reactions[d.reactTarget] || '✨');
       p.action = 'wave'; p.waveAngle = 0; p.actionDuration = 0; p.actionMaxDuration = 80;
     } else if (d.action === 'explore') {
-      const tx = d.targetX ?? (Math.random() * window.innerWidth * 0.8 + window.innerWidth * 0.1);
-      const ty = d.targetY ?? (Math.random() * window.innerHeight * 0.6 + window.innerHeight * 0.1);
-      p.targetX = tx; p.targetY = ty; p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 500;
+      let tx = d.targetX, ty = d.targetY;
+      if (tx == null) tx = 80 + Math.random() * (window.innerWidth - 200);
+      if (ty == null) ty = 80 + Math.random() * (window.innerHeight - 250);
+      // 如果目标在视口外，滚动页面
+      if (ty > window.innerHeight - 50) {
+        this.scanner.scrollToY((window.scrollY || window.pageYOffset || 0) + (ty - window.innerHeight * 0.4));
+        ty = window.innerHeight * 0.6;
+      } else if (ty < -50) {
+        this.scanner.scrollToY((window.scrollY || window.pageYOffset || 0) + ty - window.innerHeight * 0.2);
+        ty = Math.max(80, ty + window.innerHeight * 0.2);
+      }
+      p.targetX = Math.max(20, Math.min(window.innerWidth - 120, tx));
+      p.targetY = Math.max(20, Math.min(window.innerHeight - 140, ty));
+      p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 500;
       if (!d.speech) this._say('去看看那边~');
     } else if (d.action === 'walk') {
       let tx = d.targetX, ty = d.targetY;
       if (tx == null) tx = 80 + Math.random() * (window.innerWidth - 200);
       if (ty == null) ty = 80 + Math.random() * (window.innerHeight - 250);
+      // 如果目标在视口外，滚动页面
+      if (ty > window.innerHeight - 50) {
+        this.scanner.scrollToY((window.scrollY || window.pageYOffset || 0) + (ty - window.innerHeight * 0.4));
+        ty = window.innerHeight * 0.6;
+      } else if (ty < -50) {
+        this.scanner.scrollToY((window.scrollY || window.pageYOffset || 0) + ty - window.innerHeight * 0.2);
+        ty = Math.max(80, ty + window.innerHeight * 0.2);
+      }
       tx = Math.max(20, Math.min(window.innerWidth - 120, tx));
       ty = Math.max(20, Math.min(window.innerHeight - 140, ty));
       p.targetX = tx; p.targetY = ty; p.isWalking = true; p.action = 'walk'; p.actionDuration = 0; p.actionMaxDuration = 600;

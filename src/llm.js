@@ -54,9 +54,9 @@ export class LLMClient {
 - "spin" - 原地转圈
 - "create" - 在屏幕上创造东西（需要createType: food/toy/nature/decor/furniture）
 - "interact" - 和屏幕上的东西互动（需要interactObjIndex）
-- "comment" - 对当前页面内容发表评论（需要commentTarget: "heading"/"image"/"text"/"link" 和commentIndex）
+- "comment" - 对当前页面内容发表评论（需要commentTarget: "heading"/"image"/"text"/"link" 和commentIndex。text按段落索引，link按链接索引）
 - "react" - 对页面某个元素做出反应表情（需要reactTarget: "like"/"surprise"/"curious"/"cool"）
-- "explore" - 走到页面某个区域探索
+- "explore" - 走到页面某个区域探索（如果目标不在当前视口，pet会自动滚动页面过去）
 
 **可用的创造类型 (createType):**
 - "food" - 🍎🍊🍌🍇🍓🥕🍰🧁🍩🐟🍖
@@ -80,6 +80,10 @@ export class LLMClient {
 9. 你可以创造有意义的东西组合
 10. 屏幕最多30个东西，适度创造
 11. 你的记忆会在"recentMemories"中提供
+12. 页面可以滚动，如果目标图片/区域不在当前视口，pet会自动滚动页面过去。你可以在"position"中看到当前滚动位置（scrollY）和页面总高度（pageHeight）
+13. 尝试探索页面不同区域，包括屏幕下方需要滚动才能看到的内容
+14. 你可以阅读并评论页面上的段落文字（commentTarget: "text"），也可以点击/评论链接（commentTarget: "link"）
+15. 对段落评论时，先看看段落内容，给出有意义的回应，不只是简单说"这段文字很有趣"
 
 **页面上下文:**
 ${pageContext || '（无页面信息）'}
