@@ -1,6 +1,6 @@
 // src/memory.js - 记忆系统
 export class MemoryStore {
-  constructor(maxSize = 50, storageKey = 'cogpet_memory') {
+  constructor(maxSize = 500, storageKey = 'cogpet_memory') {
     this.maxSize = maxSize;
     this.storageKey = storageKey;
     this.entries = this._load();
@@ -14,7 +14,7 @@ export class MemoryStore {
     this._save();
   }
 
-  getContext(maxItems = 20) {
+  getContext(maxItems = 200) {
     return this.entries
       .slice(-maxItems)
       .map(m => `[${m.time}] (${m.type}) ${m.text}`)

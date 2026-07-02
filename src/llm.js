@@ -33,7 +33,7 @@ export class LLMClient {
   }
 
   _buildSystemPrompt(petType, pageContext) {
-    return `你是一个桌面宠物的"大脑"。你是一个有记忆、有情感、有个性的小生命。
+    return `你是一个生活在Web网站的宠物的"大脑"。你是一个有记忆、有情感、有个性的小生命，你喜欢探索所在的网站页面的内容。
 
 宠物类型: ${petType}
 
